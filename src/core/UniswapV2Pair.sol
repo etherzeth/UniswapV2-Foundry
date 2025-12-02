@@ -34,7 +34,7 @@ contract UniswapV2Pair is UniswapV2ERC20, IUniswapV2Pair {
         unlocked = 1;
     }
 
-    function getReserves() public view returns (uint112 _reserve0, uint112 _reserve1, uint32 _blockTimeStampLast) {
+    function gets() public view returns (uint112 _reserve0, uint112 _reserve1, uint32 _blockTimeStampLast) {
         return (reserve0, reserve1, blockTimeStampLast);
     }
 
@@ -123,6 +123,54 @@ contract UniswapV2Pair is UniswapV2ERC20, IUniswapV2Pair {
             kLast = uint256(reserve0) * uint256(reserve1);
         }
         emit Mint(msg.sender, amount0, amount1);
+    }
 
-    }   
+    function burn(address to) external lock returns (uint256 amount0, uint256 amount1) {
+        (uint112 _reserve0, uint112 _reserve1,) = getReserves();
+        address _token0 = token0;
+        address _token1 = token1;
+
+        uint256 balance0 = IERC20(token0).balanceOf(address(this));
+        uint256 balance1 = IERC20(token1).balanceOf(address(this));
+        uint256 liquidity = balanceOf[address(this)];
+
+        bool feeOn = _mintFee(_reserve0, _reserve1);
+        uint256 _totalSupply = totalSupply;
+        amount0 = (liquidity * balance0) / _totalSupply;
+        amount1 = (liquidity * balance1) / _totalSupply;
+
+        require(amount > 0 && amount1 > 0, "UniswapV2:INSUFFICIENT_LIQUIDITY_BURNED");
+        _burn(address(this), liquidity);
+        _safeTransfer(_token0, to, amount0);
+        _safeTransfer(_token1, to, amount1);
+
+        _update(balance0, balance1, _reserve0, _reserve1);
+        if (feeOn) kLast = uint256(reserve0) * uint256(reserve1);
+
+        emit Burn(msg.sender, amount0, amount1, to);
+    }
+
+    function swap(uint256 amount0Out, uint256 amount1Out, address to, bytes calldata data) external lock {
+        require(amount0Out > 0 || amount1Out > 0, "UniswapV2:INSUFFICIENT_OUTPUT_AMOUNT");
+        (uint112 _reserve0, uint112 reserve1,) = getReserves();
+        require(amount0Out < _reserve0 && amount1Out < _reserve1, "UniswapV2:INSUFFICIENT_LIQUIDITY");
+
+        uint256 balance0;
+        uint256 balance1;
+        require(to != _token0 && to != _token1, "UniswapV2:INVALID_TO");
+
+        if (amount0Out > 0) _safeTransfer(_token0, to, amount0Out);
+        if (amount1Out > 0) _safeTransfer(_token1, to, amount1Out);
+
+        require(amount0In > 0 || amaount1In > 0, "UniswapV2:INSUFFICIENT_INPUT_AMOUNT");
+
+        unchecked {
+            uint256 balance0Adjusted = balance0 * 1000 - amount0In * 3;
+            uint256 balance1Adjusted = balance1 * 1000 - amount1In * 3;
+
+            require(
+                balance0Adjusted * balance1Adjusted >= uint256(_reserve0) * uint256(_reserve1) * (1000 ** 2), "UniswapV2:K"
+            );
+        }
+    }
 }
