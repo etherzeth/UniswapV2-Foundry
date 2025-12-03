@@ -2,8 +2,8 @@ pragma solidity ^0.8.18;
 
 import {IUniswapV2Pair} from "./interfaces/IUniswapV2Pair.sol";
 import {UniswapV2ERC20} from "./UniswapV2ERC20.sol";
-import {UniswapV2Factory} from "./UniswapV2Factory.sol";
 import {IERC20} from "./interfaces/IERC20.sol";
+import {UniswapV2Factory} from "./UniswapV2Factory.sol";
 import {IUniswapV2Factory} from "./interfaces/IUniswapV2Factory.sol";
 import {IUniswapV2Callee} from "./interfaces/IUniswapV2Callee.sol";
 import {Math} from "./libraries/Math.sol";
@@ -34,7 +34,7 @@ contract UniswapV2Pair is UniswapV2ERC20, IUniswapV2Pair {
         unlocked = 1;
     }
 
-    function gets() public view returns (uint112 _reserve0, uint112 _reserve1, uint32 _blockTimeStampLast) {
+    function getReserves() public view returns (uint112 _reserve0, uint112 _reserve1, uint32 _blockTimeStampLast) {
         return (reserve0, reserve1, blockTimeStampLast);
     }
 
@@ -101,13 +101,13 @@ contract UniswapV2Pair is UniswapV2ERC20, IUniswapV2Pair {
         uint256 balance1 = IERC20(token1).balanceOf(address(this));
 
         uint256 amount0 = balance0 - _reserve0;
-        uint256 amount0 = balance1 - _reserve1;
+        uint256 amount1 = balance1 - _reserve1;
 
         bool feeOn = _mintFee(_reserve0, _reserve1);
         uint256 _totalSupply = totalSupply; // gas savings, must be defined here since totalSupply can update in _mintFee
 
         if (_totalSupply == 0) {
-            liquidity = Math.sqrt((amount0 * amount1) - MINIMUM_LIQUIDITY);
+            liquidity = Math.sqrt(amount0 * amount1) - MINIMUM_LIQUIDITY;
 
             _mint(address(0), MINIMUM_LIQUIDITY);
         } else {
@@ -139,12 +139,15 @@ contract UniswapV2Pair is UniswapV2ERC20, IUniswapV2Pair {
         amount0 = (liquidity * balance0) / _totalSupply;
         amount1 = (liquidity * balance1) / _totalSupply;
 
-        require(amount > 0 && amount1 > 0, "UniswapV2:INSUFFICIENT_LIQUIDITY_BURNED");
+        require(amount0 > 0 && amount1 > 0, "UniswapV2:INSUFFICIENT_LIQUIDITY_BURNED");
         _burn(address(this), liquidity);
         _safeTransfer(_token0, to, amount0);
         _safeTransfer(_token1, to, amount1);
 
-        _update(balance0, balance1, _reserve0, _reserve1);
+        uint256 balance0After = IERC20(token0).balanceOf(address(this));
+        uint256 balance1After = IERC20(token1).balanceOf(address(this));
+
+        _update(balance0After, balance1After, _reserve0, _reserve1);
         if (feeOn) kLast = uint256(reserve0) * uint256(reserve1);
 
         emit Burn(msg.sender, amount0, amount1, to);
@@ -152,17 +155,32 @@ contract UniswapV2Pair is UniswapV2ERC20, IUniswapV2Pair {
 
     function swap(uint256 amount0Out, uint256 amount1Out, address to, bytes calldata data) external lock {
         require(amount0Out > 0 || amount1Out > 0, "UniswapV2:INSUFFICIENT_OUTPUT_AMOUNT");
-        (uint112 _reserve0, uint112 reserve1,) = getReserves();
+        (uint112 _reserve0, uint112 _reserve1,) = getReserves();
         require(amount0Out < _reserve0 && amount1Out < _reserve1, "UniswapV2:INSUFFICIENT_LIQUIDITY");
 
-        uint256 balance0;
-        uint256 balance1;
-        require(to != _token0 && to != _token1, "UniswapV2:INVALID_TO");
+        require(to != token0 && to != token1, "UniswapV2:INVALID_TO");
 
-        if (amount0Out > 0) _safeTransfer(_token0, to, amount0Out);
-        if (amount1Out > 0) _safeTransfer(_token1, to, amount1Out);
+        if (amount0Out > 0) _safeTransfer(token0, to, amount0Out);
+        if (amount1Out > 0) _safeTransfer(token1, to, amount1Out);
 
-        require(amount0In > 0 || amaount1In > 0, "UniswapV2:INSUFFICIENT_INPUT_AMOUNT");
+        if (data.length > 0) {
+            IUniswapV2Callee(to).uniswapV2Call(msg.sender, amount0Out, amount1Out, data);
+        }
+        
+        uint256 balance0 = IERC20(token0).balanceOf(address(this));
+        uint256 balance1 = IERC20(token1).balanceOf(address(this));
+
+        uint256 amount0In = 0;
+        uint256 amount1In = 0;
+
+        if (balance0 > _reserve0 - amount0Out) {
+            amount0In  = balance0 - (_reserve0 - amount0Out);
+        }
+        if (balance1 > _reserve1 - amount1Out) {
+            amount1In = balance1 - (_reserve1 - amount1Out);
+        }
+
+        require(amount0In > 0 || amount1In > 0, "UniswapV2:INSUFFICIENT_INPUT_AMOUNT");
 
         unchecked {
             uint256 balance0Adjusted = balance0 * 1000 - amount0In * 3;
@@ -172,5 +190,8 @@ contract UniswapV2Pair is UniswapV2ERC20, IUniswapV2Pair {
                 balance0Adjusted * balance1Adjusted >= uint256(_reserve0) * uint256(_reserve1) * (1000 ** 2), "UniswapV2:K"
             );
         }
+
+        _update(balance0, balance1, _reserve0, _reserve1);
+        emit Swap(msg.sender, amount0In, amount1In, amount0Out, amount1In, to);
     }
 }
