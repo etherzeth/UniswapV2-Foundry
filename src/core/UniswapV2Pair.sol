@@ -19,7 +19,6 @@ contract UniswapV2Pair is UniswapV2ERC20, IUniswapV2Pair {
     uint112 private reserve0;
     uint112 private reserve1;
     uint32 private blockTimeStampLast;
-
     uint256 public price0CumulativeLast;
     uint256 public price1CumulativeLast;
     
