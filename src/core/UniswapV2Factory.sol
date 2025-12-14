@@ -15,6 +15,7 @@ contract UniswapV2Factory is IUniswapV2Factory {
 
     constructor(address _feeToSetter) {
         feeToSetter = _feeToSetter;
+        feeTo = address(0);
     }
 
     function createPair(address tokenA, address tokenB) external returns (address pair) {

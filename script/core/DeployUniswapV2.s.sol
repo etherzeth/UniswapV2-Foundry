@@ -36,7 +36,7 @@ contract DeployUniswapV2 is Script {
 
         // 2. Deploy MockERC20 tokens
         tokenA = new TestMockERC20("EthereumToken", "ETH", 100000 ether);
-        tokenB = new TestMockERC20("DollarToken", "ETH", 100000 ether);
+        tokenB = new TestMockERC20("DollarToken", "USDC", 100000 ether);
 
         // 3. Create Pair
         pair = factory.createPair(address(tokenA), address(tokenB));
