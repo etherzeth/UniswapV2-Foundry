@@ -6,11 +6,11 @@ import {IUniswapV2Pair} from "../core/interfaces/IUniswapV2Pair.sol";
 
 import {TransferHelper} from "./libraries/TransferHelper.sol";
 import {UniswapV2Library} from "./libraries/UniswapV2Library.sol";
-import {IUniswapV2Router01} from "./interfaces/IUniswapV2Router01.sol";
+import "./interfaces/IUniswapV2Router02.sol" as IRouterInterface;
 import {IERC20} from "./interfaces/IERC20.sol";
 import {IWETH} from "./interfaces/IWETH.sol";
 
-contract UniswapV2Router01 is IUniswapV2Router01 {
+contract UniswapV2Router02 is IRouterInterface.IUniswapV2Router02 {
     address public immutable override factory;
     address public immutable override WETH;
 
@@ -19,7 +19,7 @@ contract UniswapV2Router01 is IUniswapV2Router01 {
         _;
     }
 
-    constructor(address _factory, address _WETH) {
+    constructor (address _factory, address _WETH)  {
         factory = _factory;
         WETH = _WETH;
     }
@@ -31,11 +31,11 @@ contract UniswapV2Router01 is IUniswapV2Router01 {
     function _addLiquidity(
         address tokenA,
         address tokenB,
-        uint256 amountADesired, // put by the user
-        uint256 amountBDesired, // put by the user
-        uint256 amountAMin, // put by router via ui
-        uint256 amountBMin // put by router via ui to avoid big loss or reserve moving too much
-    ) private returns (uint256 amountA, uint256 amountB) {
+        uint256 amountADesired,
+        uint256 amountBDesired,
+        uint256 amountAMin,
+        uint256 amountBMin
+    ) private returns (uint256 amountA, uint256 amountB)  {
         if (IUniswapV2Factory(factory).getPair(tokenA, tokenB) == address(0)) {
             IUniswapV2Factory(factory).createPair(tokenA, tokenB);
         }
@@ -45,15 +45,16 @@ contract UniswapV2Router01 is IUniswapV2Router01 {
             (amountA, amountB) = (amountADesired, amountBDesired);
         } else {
             uint256 amountBOptimal = UniswapV2Library.quote(amountADesired, reserveA, reserveB);
-
+            
             if (amountBOptimal <= amountBDesired) {
                 require(amountBOptimal >= amountBMin, "UniswapV2Router:INSUFFICIENT_B_AMOUNT");
                 (amountA, amountB) = (amountADesired, amountBOptimal);
             } else {
                 uint256 amountAOptimal = UniswapV2Library.quote(amountBDesired, reserveB, reserveA);
+                
                 assert(amountAOptimal <= amountADesired);
-                require(amountAOptimal >= amountAMin, "UniswapV2Router:INSUFFICIENT_A_AMOUNT");
-                (amountA, amountB) = (amountAOptimal, amountBOptimal);
+                require(amountAOptimal >= amountAMin, "UniswapV2Router:INSUFFICIENT_A_MOUNT");
+                (amountA, amountB) = (amountAOptimal, amountBDesired);
             }
         }
     }
@@ -85,14 +86,15 @@ contract UniswapV2Router01 is IUniswapV2Router01 {
         uint256 deadline
     ) external payable override ensure(deadline) returns (uint256 amountToken, uint256 amountETH, uint256 liquidity) {
         (amountToken, amountETH) = _addLiquidity(token, WETH, amountTokenDesired, msg.value, amountTokenMin, amountETHMin);
+
         address pair = UniswapV2Library.pairFor(factory, token, WETH);
         TransferHelper.safeTransferFrom(token, msg.sender, pair, amountToken);
         IWETH(WETH).deposit{value: amountETH}();
         assert(IWETH(WETH).transfer(pair, amountETH));
         liquidity = IUniswapV2Pair(pair).mint(to);
-        if (msg.value > amountETH) {
+        if (msg.value > amountETH) {    
             TransferHelper.safeTransferETH(msg.sender, msg.value - amountETH);
-        } // refund dust ETH, if any
+        } 
     }
 
     function removeLiquidity(
@@ -105,14 +107,14 @@ contract UniswapV2Router01 is IUniswapV2Router01 {
         uint256 deadline
     ) public override ensure(deadline) returns (uint256 amountA, uint256 amountB) {
         address pair = UniswapV2Library.pairFor(factory, tokenA, tokenB);
-        IUniswapV2Pair(pair).transferFrom(msg.sender, pair, liquidity);
+        IUniswapV2Pair(pair).transferFrom(msg.sender, pair, liquidity); // SEND LP TOKENS TO PAIR
         (uint256 amount0, uint256 amount1) = IUniswapV2Pair(pair).burn(to);
         (address token0,) = UniswapV2Library.sortTokens(tokenA, tokenB);
-        (amountA, amountB) = tokenA == token0 ? (amount0, amount1) : (amount1, amount0); // to assign right amount to right token.
+        (amountA, amountB) = tokenA == token0 ? (amount0, amount1) : (amount1, amount0); // TO ASSIGN RIGHT AMOUNT TO RIGHT TOKEN
         require(amountA >= amountAMin, "UniswapV2Router: INSUFFICIENT_A_AMOUNT");
         require(amountB >= amountBMin, "UniswapV2Router: INSUFFICIENT_B_AMOUNT");
     }
-
+    
     function removeLiquidityETH(
         address token,
         uint256 liquidity,
@@ -126,7 +128,7 @@ contract UniswapV2Router01 is IUniswapV2Router01 {
         IWETH(WETH).withdraw(amountETH);
         TransferHelper.safeTransferETH(to, amountETH);
     }
-    
+
     function removeLiquidityWithPermit(
         address tokenA,
         address tokenB,
@@ -164,13 +166,14 @@ contract UniswapV2Router01 is IUniswapV2Router01 {
         (amountToken, amountETH) = removeLiquidityETH(token, liquidity, amountTokenMin, amountETHMin, to, deadline);
     }
 
-    // SWAP
     function _swap(uint256[] memory amounts, address[] memory path, address _to) private {
         for (uint256 i; i < path.length - 1; i++) {
             (address input, address output) = (path[i], path[i + 1]);
             (address token0,) = UniswapV2Library.sortTokens(input, output);
             uint256 amountOut = amounts[i + 1];
-            (uint256 amount0Out, uint256 amount1Out) = input == token0 ? (uint256(0), amountOut) : (amountOut, uint256(0));
+
+            (uint256 amount0Out, uint256 amount1Out) =
+                input == token0 ? (uint256(0), amountOut) : (amountOut, uint256(0));
             address to = i < path.length - 2 ? UniswapV2Library.pairFor(factory, output, path[i + 2]) : _to;
             IUniswapV2Pair(UniswapV2Library.pairFor(factory, input, output)).swap(
                 amount0Out, amount1Out, to, new bytes(0)
@@ -180,18 +183,23 @@ contract UniswapV2Router01 is IUniswapV2Router01 {
 
     function swapExactTokensForTokens(
         uint256 amountIn,
-        uint256 amount0OutMin,
+        uint256 amountOutMin,
         address[] calldata path,
         address to,
         uint256 deadline
-    ) external override ensure(deadline) returns (uint256[] memory amounts) {
+    ) external virtual override ensure(deadline) returns (uint256[] memory amounts) {
         amounts = UniswapV2Library.getAmountsOut(factory, amountIn, path);
+        require(amounts[amounts.length - 1] >= amountOutMin, "UniswapV2Router: INSUFFICIENT_OUTPUT_AMOUNT");
+        TransferHelper.safeTransferFrom(
+            path[0], msg.sender, UniswapV2Library.pairFor(factory, path[0], path[1]), amounts[0]
+        );
+        _swap(amounts, path, to);
     }
 
     function swapTokensForExactTokens(
         uint256 amountOut,
         uint256 amountInMax,
-        address[] calldata path,    
+        address[] calldata path,
         address to,
         uint256 deadline
     ) external ensure(deadline) returns (uint256[] memory amounts) {
@@ -203,108 +211,5 @@ contract UniswapV2Router01 is IUniswapV2Router01 {
         _swap(amounts, path, to);
     }
 
-    function swapExactETHForTokens(
-        uint256 amountOutMin,
-        address[] calldata path,
-        address to,
-        uint256 deadline
-    ) external payable override ensure(deadline) returns (uint256[] memory amounts) {
-        require(path[0] == WETH, "UniswapV2Router: INVALID_PATH");
-        amounts = UniswapV2Library.getAmountsOut(factory, msg.value, path);
-        require(amounts[amounts.length - 1] >= amountOutMin, "UniswapV2Router: INSUFFICIENT_OUTPUT_AMOUNT");
-        IWETH(WETH).deposit{value: amounts[0]}();
-        assert(IWETH(WETH).transfer(UniswapV2Library.pairFor(factory, path[0], path[1]), amounts[0]));
-        _swap(amounts, path, to);
-    }
-
-    function swapTokensForExactETH(
-        uint256 amountOut,
-        uint256 amountInMax,
-        address[] calldata path,
-        address to,
-        uint256 deadline
-    ) external override ensure(deadline) returns (uint256[] memory amounts) {
-        require(path[path.length - 1] == WETH, "UniswapV2Router: INVALID_PATH");
-        amounts = UniswapV2Library.getAmountsIn(factory, amountOut, path);
-        require(amounts[0] <= amountInMax, "UniswapV2Router: INVALID_PATH");
-        TransferHelper.safeTransferFrom(
-            path[0], msg.sender, UniswapV2Library.pairFor(factory, path[0], path[1]), amounts[0]
-        );
-        _swap(amounts, path, address(this));
-        IWETH(WETH).withdraw(amounts[amounts.length - 1]);
-        TransferHelper.safeTransferETH(to, amounts[amounts.length - 1]);
-    }
-
-    function swapExactTokensForETH(
-        uint256 amountIn,
-        uint256 amountOutMin,
-        address[] calldata path,
-        address to,
-        uint256 deadline
-    ) external override ensure(deadline) returns (uint256[] memory amounts) {
-        require(path[path.length - 1] == WETH, "UniswapV2Router: INVALID_PATH");
-        amounts = UniswapV2Library.getAmountsOut(factory, amountIn, path);
-        require(amounts[amounts.length - 1] >= amountOutMin, "UniswapV2Router: INSUFFICIENT_OUTPUT_AMOUNT");
-        TransferHelper.safeTransferFrom(
-            path[0], msg.sender, UniswapV2Library.pairFor(factory, path[0], path[1]), amounts[0]
-        );
-        _swap(amounts, path, address(this));
-        IWETH(WETH).withdraw(amounts[amounts.length - 1]);
-        TransferHelper.safeTransferETH(to, amounts[amounts.length - 1]);
-    }
-
-    function swapETHForExactTokens(
-        uint256 amountOut,
-        address[] calldata path,
-        address to,
-        uint256 deadline
-    ) external payable override ensure(deadline) returns (uint256[] memory amounts) {
-        require(path[0] == WETH, "UniswapV2Router: INVALID_PATH");
-        amounts = UniswapV2Library.getAmountsIn(factory, amountOut, path);
-        require(amounts[0] <= msg.value, "UniswapV2Router: EXCESSIVE_INPUT_AMOUNT");
-        IWETH(WETH).deposit{value: amounts[0]}();
-        assert(IWETH(WETH).transfer(UniswapV2Library.pairFor(factory, path[0], path[1]), amounts[0]));
-        _swap(amounts, path, to);
-        if (msg.value > amounts[0]) {
-            TransferHelper.safeTransferETH(msg.sender, msg.value - amounts[0]);
-        } // refund dust eth to any
-    }
-
-    function quote(
-        uint256 amountA,
-        uint256 reserveA,
-        uint256 reserveB
-    ) public pure override returns (uint256 amountB) {
-        return UniswapV2Library.quote(amountA, reserveA, reserveB);
-    }
-
-    function getAmountOut(
-        uint256 amountIn,
-        uint256 reserveIn,
-        uint256 reserveOut
-    ) public pure override returns (uint256 amoutOut) {
-        return UniswapV2Library.getAmountOut(amountIn, reserveIn, reserveOut);
-    }
-
-    function getAmountIn(
-        uint256 amountOut,
-        uint256 reserveIn,
-        uint256 reserveOut
-    ) public pure override returns (uint256 amountIn) {
-        return UniswapV2Library.getAmountIn(amountOut, reserveIn, reserveOut);
-    }
-
-    function getAmountsOut(
-        uint256 amountIn,
-        address[] memory path
-    ) public view override returns (uint256[] memory amounts) {
-        return UniswapV2Library.getAmountsOut(factory, amountIn, path);
-    }
-
-    function getAmountsIn(
-        uint256 amountOut,
-        address[] memory path
-    ) public view override returns (uint256[] memory amounts) {
-        return UniswapV2Library.getAmountsIn(factory, amountOut, path);
-    }
+    function ()
 }

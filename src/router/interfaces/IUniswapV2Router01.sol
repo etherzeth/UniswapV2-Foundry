@@ -47,6 +47,20 @@ interface IUniswapV2Router01 {
     ) external returns (uint256 amountToken, uint256 amountETH);
 
     function removeLiquidityWithPermit( 
+        address tokenA,
+        address tokenB,
+        uint256 liquidity,
+        uint256 amountAMin,
+        uint256 amountBMin,
+        address to,
+        uint256 deadline,
+        bool approveMax,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external returns (uint256 amountA, uint256 amountB);
+
+    function removeLiquidityETHWithPermit(
         address token,
         uint256 liquidity,
         uint256 amountTokenMin,
@@ -59,13 +73,13 @@ interface IUniswapV2Router01 {
         bytes32 s
     ) external returns (uint256 amountToken, uint256 amountETH);
 
-    function swapExactTokenForTokens(
+    function swapExactTokensForTokens(
         uint256 amountIn,
         uint256 amountOutMin,
         address[] calldata path,
         address to,
         uint256 deadline
-    ) external returns (uint256[] memory amount);
+    ) external returns (uint256[] memory amounts);
 
     function swapExactETHForTokens(
         uint256 amountOutMin,
@@ -101,7 +115,7 @@ interface IUniswapV2Router01 {
         uint256 amountA,
         uint256 reserveA,
         uint256 reserveB
-    ) external returns (uint256 amountB);
+    ) external pure returns (uint256 amountB);
 
     function getAmountOut(
         uint256 amountIn,
