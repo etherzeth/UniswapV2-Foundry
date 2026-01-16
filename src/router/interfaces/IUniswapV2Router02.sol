@@ -26,7 +26,7 @@ interface IUniswapV2Router02 is IUniswapV2Router01 {
     //     bytes32 s
     // ) external returns (uint256 amountETH);
     
-    function swapExactTokensForSupportingFeeOnTransferTokens(
+    function swapExactTokensForTokensSupportingFeeOnTransferTokens(
         uint256 amountIn,
         uint256 amountOutMin,
         address[] calldata path,
